@@ -1,44 +1,23 @@
 """
 backend/agent/claude_client.py
 ================================
-Anthropic API wrapper for the Recall agent.
-
-Handles:
-  - Tool-use agentic loop (multi-turn until stop_reason == "end_turn")
-  - Retry with exponential backoff on rate limits and timeouts
-  - Forced tool-call fallback if Claude returns plain text unexpectedly
-  - Structured JSON extraction from final text response
+LLM client wrapper for the Recall agent.
+Redirects to Groq inference (llama-3.3-70b-versatile) for ultra-fast processing.
 """
 
-import os
-import json
-import time
-import logging
-import re
-from typing import Any
+from agent.groq_client import (
+    extract_json,
+    run_tool_loop,
+    call_llm_json,
+    _make_client,
+    GroqClient,
+    GROQ_API_KEY,
+    GROQ_MODEL,
+)
 
-import anthropic
-from dotenv import load_dotenv
-from pathlib import Path
-
-load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
-
-log = logging.getLogger("recall.claude")
-
-ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL         = "claude-3-haiku-20240307"
-MAX_TOKENS    = 2048
-MAX_RETRIES   = 3
-RETRY_DELAYS  = [1, 2, 4]   # seconds
-
-
-def _make_client() -> anthropic.Anthropic:
-    if not ANTHROPIC_KEY:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not set. "
-            "Add it to your .env file at the project root."
-        )
-    return anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+# Backwards-compatible aliases
+ANTHROPIC_KEY = GROQ_API_KEY
+MODEL = GROQ_MODEL
 
 
 def extract_json(text: str) -> dict:

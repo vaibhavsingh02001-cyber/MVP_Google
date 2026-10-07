@@ -63,7 +63,8 @@ cp .env.example .env
 
 Ensure your `.env` contains:
 ```env
-ANTHROPIC_API_KEY=sk-ant-api03-...
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=llama-3.3-70b-versatile
 NEXT_PUBLIC_API_URL=http://localhost:8000
 EXPORT_TOKEN=recall-export-secret-token
 ```
@@ -182,7 +183,7 @@ The exported CSV includes all 16 evaluation metric columns:
    - **Environment:** Python
    - **Build Command:** `pip install -r requirements.txt`
    - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. In the Render Dashboard, add your `ANTHROPIC_API_KEY` under **Environment Variables**.
+4. In the Render Dashboard, add your `GROQ_API_KEY` (and optionally `GROQ_MODEL=llama-3.3-70b-versatile`) under **Environment Variables**.
 5. Ensure the persistent disk mount (`/opt/render/project/src/storage`) is enabled for SQLite and ChromaDB data.
 6. Note your live service URL: `https://recall-api.onrender.com`.
 

@@ -217,33 +217,78 @@ Rules:
 
 
 def _tag_upload(image_bytes: bytes, media_type: str) -> dict:
-    """Call Claude Haiku vision on uploaded image bytes."""
-    import anthropic, re as _re
-    from agent.claude_client import extract_json
+    """Auto-tag uploaded image bytes using Groq Vision or Claude."""
+    import httpx, base64
+    from agent.groq_client import extract_json
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return {}
-
-    client = anthropic.Anthropic(api_key=api_key)
     img_b64 = base64.standard_b64encode(image_bytes).decode()
+    groq_key = os.environ.get("GROQ_API_KEY", "")
 
-    resp = client.messages.create(
-        model="claude-3-haiku-20240307",
-        max_tokens=400,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type":       "base64",
-                        "media_type": media_type,
-                        "data":       img_b64,
+    # 1. Try Groq Vision if GROQ_API_KEY is configured
+    if groq_key:
+        try:
+            with httpx.Client(timeout=25.0) as http:
+                payload = {
+                    "model": "llama-3.2-11b-vision-preview",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": _UPLOAD_TAG_PROMPT},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{media_type};base64,{img_b64}"
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 400,
+                }
+                res = http.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {groq_key}",
+                        "Content-Type": "application/json",
                     },
-                },
-                {"type": "text", "text": _UPLOAD_TAG_PROMPT},
-            ],
-        }],
-    )
-    return extract_json(resp.content[0].text if resp.content else "{}")
+                    json=payload,
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+                    return extract_json(content)
+        except Exception as e:
+            import logging
+            logging.getLogger("recall.photos").warning(f"Groq vision tagging error: {e}")
+
+    # 2. Fallback to Anthropic Claude Haiku if configured
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if anthropic_key:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=anthropic_key)
+            resp = client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=400,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": img_b64,
+                            },
+                        },
+                        {"type": "text", "text": _UPLOAD_TAG_PROMPT},
+                    ],
+                }],
+            )
+            return extract_json(resp.content[0].text if resp.content else "{}")
+        except Exception:
+            pass
+
+    return {}

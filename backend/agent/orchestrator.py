@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
-from agent.claude_client import run_tool_loop, extract_json
+from agent.groq_client import run_tool_loop, extract_json, call_llm_json
 from agent.prompts import (
     SYSTEM_PROMPT,
     PARSE_CLUES_PROMPT,
@@ -208,18 +208,10 @@ def _tool_cluster_episodes(state: dict, tool_input: dict) -> dict:
     )
 
     try:
-        from agent.claude_client import _make_client, extract_json
-        client = _make_client()
-        resp = client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = resp.content[0].text if resp.content else "{}"
-        result = extract_json(text)
+        result = call_llm_json(prompt, system=SYSTEM_PROMPT, max_tokens=1024)
         clusters = result.get("clusters", [])
     except Exception as e:
-        log.info("Claude clustering unavailable (%s); using deterministic episode clustering", e)
+        log.info("Groq clustering unavailable (%s); using deterministic episode clustering", e)
         clusters = []
 
     # Enforce count limits
@@ -261,19 +253,7 @@ def _tool_ask_next_question(state: dict, tool_input: dict) -> dict:
     )
 
     try:
-        from agent.claude_client import _make_client, extract_json
-        client = _make_client()
-        resp = client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=256,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = resp.content[0].text.strip() if resp.content else "null"
-
-        if text.lower() in ("null", "none", ""):
-            return {"question": None}
-
-        q = extract_json(text)
+        q = call_llm_json(prompt, system=SYSTEM_PROMPT, max_tokens=256)
         chips = q.get("answer_chips", [])
         if len(chips) >= 2:
             q["answer_chips"] = chips[:4]
@@ -281,7 +261,7 @@ def _tool_ask_next_question(state: dict, tool_input: dict) -> dict:
                 state["asked_questions"].append(q["question_text"])
             return {"question": q}
     except Exception as e:
-        log.info("Claude question generation unavailable (%s); using heuristic question generator", e)
+        log.info("Groq question generation unavailable (%s); using heuristic question generator", e)
 
     # Heuristic question fallback based on clue intent
     clue_lower = state.get("clue", "").lower()
@@ -345,19 +325,11 @@ def _tool_exclude_similar(state: dict, tool_input: dict) -> dict:
     )
 
     try:
-        from agent.claude_client import _make_client, extract_json
-        client = _make_client()
-        resp = client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=512,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = resp.content[0].text if resp.content else "{}"
-        updated_filters = extract_json(text)
+        updated_filters = call_llm_json(prompt, system=SYSTEM_PROMPT, max_tokens=512)
         state["filters"] = updated_filters
         return {"updated_filters": updated_filters, "excluded_ids": state["excluded_ids"]}
     except Exception as e:
-        log.info("Claude filter refinement unavailable (%s); applying heuristic refinement", e)
+        log.info("Groq filter refinement unavailable (%s); applying heuristic refinement", e)
         updated_filters = dict(current_filters)
         if signal == "not_this":
             pass  # excluded_ids already updated in state
@@ -525,21 +497,9 @@ async def run_recall_session(
 
     # ── Step 1: parse clue into filters ──────────────────────────────────────
     try:
-        from agent.claude_client import _make_client
-        client = _make_client()
-        parse_resp = client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=512,
-            messages=[{"role": "user", "content": parse_prompt}],
-        )
-        filters_text = parse_resp.content[0].text if parse_resp.content else "{}"
-        try:
-            filters = extract_json(filters_text)
-        except ValueError:
-            log.warning("Clue parse failed, using heuristic fallback")
-            filters = _heuristic_parse_clue(clue)
+        filters = call_llm_json(parse_prompt, system=SYSTEM_PROMPT, max_tokens=512)
     except Exception as e:
-        log.info("Claude clue parsing unavailable (%s); using heuristic clue parser", e)
+        log.info("Groq clue parsing unavailable (%s); using heuristic clue parser", e)
         filters = _heuristic_parse_clue(clue)
 
     state["filters"] = filters
@@ -565,7 +525,7 @@ async def run_recall_session(
             tool_handler=tool_handler,
         )
     except Exception as e:
-        log.info("Agent Claude loop unavailable (%s); executing local tool chain", e)
+        log.info("Agent Groq loop unavailable (%s); executing local tool chain", e)
         search_res = _tool_search_library(state, filters)
         candidates = state.get("last_candidates", [])
         cluster_res = _tool_cluster_episodes(state, {
