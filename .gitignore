@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Environment
+.env
+*.env.local
+
+# Databases & storage
+*.db
+*.db-shm
+*.db-wal
+backend/storage/chroma/
+backend/storage/uploads/
+
+# Demo library images (large binary assets — store separately)
+pipeline/library/raw_images/
+backend/library/images/
+
+# Node / Next.js
+node_modules/
+.next/
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+*.csv
+
+# IDE
+.vscode/settings.json
+.idea/

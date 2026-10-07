@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: recall-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CHROMA_PERSIST_DIR
+        value: ./storage/chroma
+      - key: MAX_UPLOAD_MB
+        value: "10"
+      - key: UPLOAD_TTL_HOURS
+        value: "24"
+      - key: EXPORT_TOKEN
+        sync: false
+    disk:
+      name: recall-storage
+      mountPath: /opt/render/project/src/storage
+      sizeGB: 1

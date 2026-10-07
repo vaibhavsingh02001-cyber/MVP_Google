@@ -1,0 +1,188 @@
+PROJECT: "Recall" - AI-Native Retrieval Agent MVP for Google Photos
+====================================================================
+
+ROLE AND CONTEXT
+-----------------
+I am a Product Manager on the Core Experience team at Google Photos.
+Users accumulate thousands of photos, videos, screenshots and documents.
+When they remember a photo exists but cannot describe it precisely (no
+date, place or exact keywords), retrieval breaks down.
+
+Business goal: increase the percentage of users who successfully retrieve
+a photo they remember but cannot precisely describe when they start
+searching.
+
+Research so far (discovery engine + user interviews) points to two weak
+stages in the retrieval journey:
+  (c) JUDGE: results appear, but the user cannot tell which one is right
+  (d) REFINE: the search misses, and the user has no way to narrow it
+Users don't lack memory. They remember a moment, a purpose, a mood, or a
+neighbouring event, but search only accepts date, place and object words.
+
+I need you to build a working, deployed MVP of the solution below so real
+users can attempt real retrieval tasks with it.
+
+
+THE SOLUTION TO BUILD
+----------------------
+"Recall": a conversational, clue-based retrieval agent that sits inside a
+Google Photos-style search experience. It activates when a search is weak
+or when the user taps "Can't find it? Help me remember."
+
+Core behaviours (all required):
+1. FUZZY CLUE INPUT
+   Accept messy natural-language memory dumps, e.g. "small cafe from our
+   Goa trip, I think it was raining, maybe 2023?" or "the medicine I took
+   when I was sick last year". Extract clues of these types:
+   - moment / event ("Goa trip", "when I was sick")
+   - mood or look ("rainy", "dim", "crowded", "cozy")
+   - timeline anchor ("before the Goa trip", "the day after this photo")
+   - purpose ("a receipt", "something I saved for a reason")
+   - people or objects, place fragments, rough dates
+2. SEARCH FIRST, ASK SECOND
+   Never interrogate before showing something. Run a search immediately
+   from the clues given and show results at once.
+3. NAMED CLUSTERS WITH A REASON
+   Group candidates into 3 to 5 named clusters (e.g. "Cafe in Panjim,
+   Nov 2023, rainy - 12 photos") instead of a flat grid. Each cluster
+   must show a one-line reason it matched, tied to the user's own clues.
+   This addresses the JUDGE failure: users can recognise the right group
+   fast.
+4. ONE NARROWING QUESTION
+   After showing clusters, ask exactly one question chosen to split the
+   remaining candidates most evenly (e.g. "Was there food on the table,
+   or was it the outside of the cafe?"). Offer tappable answer chips plus
+   free text. Cap at 3 questions per session.
+5. "NOT THIS" FEEDBACK
+   Let the user mark a photo or cluster as "not this" or say "earlier",
+   "later", "more like this". Each reaction must visibly update the
+   candidates. This addresses the REFINE failure.
+6. ANCHOR-BASED SEARCH
+   Let the user pick a photo they DO remember and say "it was near this
+   one" (before/after/same day), and use it as a timeline pin.
+7. CONFIRM AND CLOSE
+   A "That's it" button confirms the find, logs success, and offers to
+   save the photo to a "Found" album. A permanent "Skip to all results"
+   link must always be visible so the agent never traps the user.
+
+
+WHERE INTELLIGENCE IS ACTUALLY NEEDED (keep everything else simple)
+--------------------------------------------------------------------
+Use an LLM (Claude via API, or Gemini) ONLY for:
+- Parsing fuzzy clues into structured filters (time range, place, objects,
+  mood, anchors, purpose)
+- Resolving relative anchors ("before the Goa trip") against the library
+- Naming clusters and writing the one-line match reasons
+- Choosing the most discriminating next question
+- Interpreting "not this" feedback
+
+Do NOT use the LLM for things plain code does well: filtering by date,
+sorting, chips, the timeline UI, album save, session logging.
+
+
+DATA FOR THE MVP
+----------------
+- Real Google Photos data is not accessible, so build a standalone
+  prototype on a demo library of 150 to 300 sample images.
+- Use royalty-free images (Unsplash/Pexels or a public dataset) or user
+  uploads. Include screenshots, receipts and document-like images, not
+  only scenic photos.
+- Give each image realistic metadata: timestamp, location, and optional
+  people tags. Build the demo library so it contains clear "episodes"
+  (a trip, a sick week, a wedding, a move) so cluster naming is testable.
+- Run a vision model ONCE per image at build time to generate caption,
+  objects, dominant colours, mood tags and "purpose" tags (receipt,
+  reminder, proof, memory). Store as JSON and reuse; do not call vision
+  models on every search.
+- Support user-uploaded photos so testers can try their own memories if
+  they choose (with a clear privacy note; see constraints).
+
+
+SUGGESTED STACK (flexible, pick what is most reliable)
+-------------------------------------------------------
+- Front end: React or Next.js, styled as a Google Photos-like shell:
+  search bar, photo grid, and a side agent panel with chips.
+- Back end: small API (Node or Python/FastAPI) exposing tool-style
+  functions: search_library(filters), cluster_episodes(),
+  ask_next_question(), exclude_similar(), set_anchor().
+- Agent: Claude API with tool calling and structured JSON outputs.
+- Storage: JSON or SQLite for photo metadata; optional embeddings
+  (e.g. Chroma) for similarity and "more like this".
+- Hosting: deploy to Vercel/Netlify/Render so it has a PUBLIC URL that
+  anyone can open with no login. API keys must live server-side only.
+
+
+FUNCTIONAL REQUIREMENTS
+-----------------------
+- Works end to end: clue in, clusters out, one question, reaction,
+  narrowed results, confirm.
+- A first result must appear fast (target under 3 seconds); use cached
+  metadata and stream or show clusters as soon as they are ready.
+- Show a visible "why this matched" line for every cluster.
+- Every session logs: clues entered, queries parsed, number of turns,
+  questions asked and answered, "not this" count, time to find, outcome
+  (found, skipped, abandoned). Export logs as CSV/JSON so I can compute
+  success metrics from user tests.
+- Include a "baseline mode" toggle: plain single-shot keyword search over
+  the same library, so I can compare Recall against basic search in user
+  tests (same task, both modes).
+- Mobile-friendly layout, since testers will use phones.
+
+
+SUCCESS METRICS THE MVP MUST BE ABLE TO MEASURE
+------------------------------------------------
+- Vague-search success rate (confirmed finds / vague-search sessions)
+- Turns to find and time to find
+- First-hit rate (confirmed photo appears in the first clusters shown)
+- Question answer rate (questions answered / asked)
+- Confirm rate ("That's it" taps / sessions started)
+- Guardrails: abandon rate, wrong-confirm rate (find later undone),
+  latency
+
+
+CONSTRAINTS AND SAFEGUARDS
+--------------------------
+- Only show photos that exist in the library. Never invent photo details.
+  If confidence is low, say so and show fewer, clearer clusters.
+- Cap questions at 3 per session; always allow "skip to all results".
+- Privacy: if users upload their own photos, say plainly what is stored,
+  for how long, and provide a delete-my-data button. Do not train on or
+  share uploads. Keep API keys out of the client.
+- Handle sensitive images (medical, documents) carefully: no reading out
+  personal details in cluster names beyond generic labels like "Medicine
+  photo" or "Receipt".
+- This is a prototype, not the production Google Photos. Do not claim it
+  integrates with the real product.
+
+
+TEST TASKS TO SUPPORT (build the demo library so these work)
+------------------------------------------------------------
+1. "The small cafe from our trip, I think it was raining."
+2. "The photo of the medicine from when I was sick last year."
+3. "A screenshot I saved for a reason, I think around the time I
+   changed jobs."
+4. "A photo from the wedding, my cousin was in it."
+5. "The picture taken right after the beach day."
+
+
+DELIVERABLES
+------------
+1. A deployed, publicly accessible MVP URL (no login required).
+2. Source code in a repository with a README covering setup, env vars,
+   and how to swap in a different photo library.
+3. The demo library with metadata JSON and the build-time tagging script.
+4. Session logging with a CSV/JSON export.
+5. A short "how it works" note (agent loop, tools, prompts) that I can
+   turn into a slide.
+
+
+DEFINITION OF DONE
+------------------
+- A stranger can open the link, type a vague memory, get named clusters
+  with reasons, answer one question, say "not this", and confirm a find,
+  without any instructions from me.
+- All five test tasks can be completed in 3 turns or fewer on the demo
+  library.
+- Baseline mode and Recall mode both work on the same library and both
+  log sessions.
+- The log export gives me the fields needed to compute the metrics above.

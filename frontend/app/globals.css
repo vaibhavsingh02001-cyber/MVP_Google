@@ -1,0 +1,126 @@
+/* ==========================================================================
+   Google Photos Official Material 3 Design System (Light Theme)
+   ========================================================================== */
+
+:root {
+  /* Google Photos Light Theme Tokens */
+  --bg-base: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #f8fafd;
+  --bg-search: #edf2fa;
+  --bg-search-hover: #e3e8f5;
+  --bg-search-focus: #ffffff;
+  
+  /* Google Material You Brand Accents */
+  --gp-blue: #1a73e8;
+  --gp-blue-hover: #1557b0;
+  --gp-blue-pill: #c2e7ff;
+  --gp-blue-banner: #d3e3fd;
+  --gp-blue-text: #001d35;
+  --gp-blue-btn: #0b57d0;
+  --gp-red: #ea4335;
+  --gp-yellow: #fbbc04;
+  --gp-green: #34a853;
+  
+  /* Text Tokens */
+  --font-family: var(--font-inter), "Google Sans", "Product Sans", Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
+  --text-primary: #1f1f1f;
+  --text-secondary: #444746;
+  --text-tertiary: #5f6368;
+  --text-disabled: #80868b;
+  
+  /* Borders & Dividers */
+  --border-subtle: #e0e2ec;
+  --border-card: #e0e2ec;
+  
+  /* Geometry */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+  
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.2, 0, 0, 1);
+  --transition-normal: 250ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Base Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-family);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+  height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbars matching Google Photos desktop */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #bdc1c6;
+  border-radius: 5px;
+  border: 2px solid #ffffff;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9aa0a6;
+}
+
+/* Keyframe Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(66, 133, 244, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(66, 133, 244, 0.45);
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}

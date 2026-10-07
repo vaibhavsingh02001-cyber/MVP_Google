@@ -1,0 +1,100 @@
+[
+  {
+    "label": "Goa Trip Nov 2023",
+    "count": 40,
+    "queries": [
+      "cafe interior india cozy",
+      "goa beach india",
+      "indian restaurant food",
+      "rain street india",
+      "panjim goa street"
+    ],
+    "date_range": { "from": "2023-11-10", "to": "2023-11-18" },
+    "location": "Panjim, Goa",
+    "latitude": 15.4989,
+    "longitude": 73.8278,
+    "purpose_hint": "memory"
+  },
+  {
+    "label": "Sick Week Jan 2024",
+    "count": 20,
+    "queries": [
+      "medicine pills bottle",
+      "pharmacy prescription",
+      "thermometer sick",
+      "home bedroom rest"
+    ],
+    "date_range": { "from": "2024-01-08", "to": "2024-01-15" },
+    "location": "Home, Mumbai",
+    "latitude": 19.0760,
+    "longitude": 72.8777,
+    "purpose_hint": "memory"
+  },
+  {
+    "label": "Job Change Mar 2023",
+    "count": 15,
+    "queries": [
+      "laptop office desk",
+      "document paper office",
+      "smartphone screen notification",
+      "coffee desk workspace"
+    ],
+    "date_range": { "from": "2023-03-01", "to": "2023-03-15" },
+    "location": "Office, Bengaluru",
+    "latitude": 12.9716,
+    "longitude": 77.5946,
+    "purpose_hint": "reminder"
+  },
+  {
+    "label": "Cousin's Wedding Dec 2023",
+    "count": 35,
+    "queries": [
+      "indian wedding decoration hall",
+      "wedding ceremony people",
+      "wedding reception dinner",
+      "bride groom celebration",
+      "wedding flowers decoration"
+    ],
+    "date_range": { "from": "2023-12-20", "to": "2023-12-23" },
+    "location": "Jaipur, Rajasthan",
+    "latitude": 26.9124,
+    "longitude": 75.7873,
+    "purpose_hint": "memory"
+  },
+  {
+    "label": "Beach Day Oct 2023",
+    "count": 20,
+    "queries": [
+      "beach sunset sea waves",
+      "ocean shore sand",
+      "beach evening golden hour",
+      "seafood dinner restaurant"
+    ],
+    "date_range": { "from": "2023-10-14", "to": "2023-10-15" },
+    "location": "Juhu Beach, Mumbai",
+    "latitude": 19.0989,
+    "longitude": 72.8267,
+    "purpose_hint": "memory"
+  },
+  {
+    "label": "Everyday",
+    "count": 70,
+    "queries": [
+      "grocery receipt paper",
+      "food plate meal",
+      "coffee cup table",
+      "street city walk",
+      "park nature walk",
+      "shopping bag product",
+      "book reading table",
+      "home kitchen cooking",
+      "gym workout fitness",
+      "bus train commute"
+    ],
+    "date_range": { "from": "2023-01-01", "to": "2024-06-30" },
+    "location": "Mumbai",
+    "latitude": 19.0760,
+    "longitude": 72.8777,
+    "purpose_hint": "mixed"
+  }
+]
