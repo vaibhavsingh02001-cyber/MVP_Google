@@ -21,7 +21,10 @@ const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 /**
  * Returns the browser-accessible URL for an image.
  */
-export function getPhotoImageUrl(photo: Photo | { filename: string; session_id?: string }): string {
+export function getPhotoImageUrl(photo: Photo | { filename: string; session_id?: string; src?: string; url?: string }): string {
+  if ("src" in photo && (photo as any).src) {
+    return (photo as any).src;
+  }
   if ("url" in photo && photo.url) {
     return photo.url;
   }

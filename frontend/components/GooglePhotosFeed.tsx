@@ -10,6 +10,7 @@ interface GooglePhotosFeedProps {
   onPhotoClick: (photo: Photo) => void;
   onConfirm?: (photo: Photo) => void;
   onAnchor?: (photo: Photo) => void;
+  highlightedPhotoId?: string | null;
 }
 
 interface DateGroup {
@@ -23,8 +24,19 @@ export function GooglePhotosFeed({
   onPhotoClick,
   onConfirm,
   onAnchor,
+  highlightedPhotoId,
 }: GooglePhotosFeedProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Scroll highlighted photo into view when found by Recall AI
+  React.useEffect(() => {
+    if (highlightedPhotoId) {
+      const el = document.getElementById(`photo-tile-${highlightedPhotoId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [highlightedPhotoId]);
 
   const toggleSelect = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -124,11 +136,13 @@ export function GooglePhotosFeed({
               const isVideo = pIdx % 4 === 1;
               const videoDuration = pIdx % 2 === 0 ? "00:06" : "00:13";
               const isSelected = selectedIds.has(photo.id);
+              const isHighlighted = highlightedPhotoId === photo.id;
 
               return (
                 <div
                   key={photo.id}
-                  className={`photo-tile ${isSelected ? "selected" : ""}`}
+                  id={`photo-tile-${photo.id}`}
+                  className={`photo-tile ${isSelected ? "selected" : ""} ${isHighlighted ? "highlighted-found" : ""}`}
                   onClick={() => onPhotoClick(photo)}
                   role="button"
                   tabIndex={0}
@@ -151,6 +165,13 @@ export function GooglePhotosFeed({
                         }
                       }}
                     />
+
+                    {/* Found by Recall AI Highlight Badge */}
+                    {isHighlighted && (
+                      <div className="found-badge">
+                        <span>✨ Found Photo</span>
+                      </div>
+                    )}
 
                     {/* Google Photos Selection Check Circle */}
                     <button
@@ -281,6 +302,42 @@ export function GooglePhotosFeed({
         .photo-tile.selected {
           outline: 3px solid #8ab4f8;
           outline-offset: -3px;
+        }
+
+        .photo-tile.highlighted-found {
+          outline: 4px solid #1a73e8 !important;
+          outline-offset: -2px;
+          box-shadow: 0 0 0 4px #c2e7ff, 0 8px 24px rgba(26, 115, 232, 0.45);
+          z-index: 10;
+          animation: pulse-found 2.2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-found {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 4px #c2e7ff, 0 8px 24px rgba(26, 115, 232, 0.45);
+          }
+          50% {
+            transform: scale(1.03);
+            box-shadow: 0 0 0 6px #1a73e8, 0 12px 28px rgba(26, 115, 232, 0.65);
+          }
+        }
+
+        .found-badge {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          background: #1a73e8;
+          color: #ffffff;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 3px 8px;
+          border-radius: 12px;
+          z-index: 6;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+          display: flex;
+          align-items: center;
+          gap: 4px;
         }
 
         .tile-aspect {

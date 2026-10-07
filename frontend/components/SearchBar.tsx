@@ -9,6 +9,7 @@ interface SearchBarProps {
   isLoading: boolean;
   mode: Mode;
   onModeChange?: (mode: Mode) => void;
+  onOpenAgent?: () => void;
   value?: string;
   disabled?: boolean;
 }
@@ -27,6 +28,7 @@ export function SearchBar({
   isLoading,
   mode,
   onModeChange,
+  onOpenAgent,
   value,
   disabled = false,
 }: SearchBarProps) {
@@ -120,6 +122,9 @@ export function SearchBar({
           className={`try-recall-ai-btn ${mode === "recall" ? "active" : ""}`}
           onClick={(e) => {
             toggleAIMode(e);
+            if (onOpenAgent) {
+              onOpenAgent();
+            }
             setShowSuggestions(true);
             const input = document.getElementById("google-photos-search-input");
             input?.focus();

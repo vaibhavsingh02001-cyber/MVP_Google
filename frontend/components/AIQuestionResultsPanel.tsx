@@ -1,518 +1,1179 @@
 "use client";
 
-import React from "react";
-import { Cluster, Question, Photo, FeedbackSignal } from "@/lib/types";
-import { SparklesIcon, CheckIcon, AnchorIcon, ClockIcon } from "./Icons";
-import { getPhotoImageUrl, getPhotoFallbackSvg } from "@/lib/api";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  DEMO_PHOTOS,
+  DemoPhoto,
+  ScoredCluster,
+  scoreAndRankClusters,
+} from "@/data/demo-photos";
+import { getPhotoImageUrl } from "@/lib/api";
+import {
+  SparklesIcon,
+  CheckIcon,
+  CloseIcon,
+  RefreshCwIcon,
+} from "./Icons";
+
+interface Message {
+  id: string;
+  sender: "agent" | "user";
+  text: string;
+  chips?: string[];
+  step?: number;
+  clusters?: ScoredCluster[];
+  narrowingQuestion?: string;
+  narrowingChips?: string[];
+  foundPhoto?: DemoPhoto;
+}
 
 interface AIQuestionResultsPanelProps {
-  query: string;
-  question: Question | null;
-  clusters: Cluster[];
-  allPhotos: Photo[];
-  turnsUsed: number;
-  maxTurns?: number;
-  isLoading: boolean;
-  confidence?: string;
-  elapsedMs?: number;
-  onSelectAnswer: (answer: string) => void;
-  onFeedback: (signal: FeedbackSignal, excludedIds: string[], answer?: string) => void;
-  onPhotoClick: (photo: Photo) => void;
-  onConfirmPhoto: (photo: Photo) => void;
-  onAnchorPhoto: (photo: Photo) => void;
   onClose: () => void;
+  onSelectFoundPhoto: (photo: DemoPhoto) => void;
+  onHighlightPhoto?: (photoId: string | null) => void;
+  initialQuery?: string;
+}
+
+function formatMonthYear(dateIso: string): string {
+  try {
+    const d = new Date(dateIso);
+    if (!isNaN(d.getTime())) {
+      const months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December",
+      ];
+      return `${months[d.getMonth()]} ${d.getFullYear()}`;
+    }
+  } catch {
+    // fallback
+  }
+  return "Recently";
 }
 
 export function AIQuestionResultsPanel({
-  query,
-  question,
-  clusters,
-  allPhotos,
-  turnsUsed,
-  maxTurns = 3,
-  isLoading,
-  confidence,
-  elapsedMs,
-  onSelectAnswer,
-  onFeedback,
-  onPhotoClick,
-  onConfirmPhoto,
-  onAnchorPhoto,
   onClose,
+  onSelectFoundPhoto,
+  onHighlightPhoto,
+  initialQuery,
 }: AIQuestionResultsPanelProps) {
-  const displayQuestion = question?.question_text || "Which context best describes this moment?";
-  const displayChips = question?.answer_chips && question.answer_chips.length > 0
-    ? question.answer_chips
-    : ["☀️ Daytime / Outdoors", "☕ Coffee shop / Indoors", "🧾 With paper receipt / document", "👥 With family & friends"];
+  // Current conversational step: 1 (mood), 2 (timeline), 3 (clues), 4 (clusters & narrowing), 6 (found)
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isTyping, setIsTyping] = useState<boolean>(true);
+  const [inputText, setInputText] = useState<string>("");
+
+  // Answers recorded across steps
+  const [moodAnswer, setMoodAnswer] = useState<string>("");
+  const [timelineAnswer, setTimelineAnswer] = useState<string>("");
+  const [clueAnswer, setClueAnswer] = useState<string>("");
+  const [narrowingAnswer, setNarrowingAnswer] = useState<string>("");
+
+  // Cluster state & exclusions
+  const [excludedClusterIds, setExcludedClusterIds] = useState<string[]>([]);
+  const [activeClusters, setActiveClusters] = useState<ScoredCluster[]>([]);
+  const [activeNarrowingQ, setActiveNarrowingQ] = useState<string>("");
+  const [foundPhoto, setFoundPhoto] = useState<DemoPhoto | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-scroll chat to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping]);
+
+  // Initial step 1 prompt with typing delay (750ms)
+  useEffect(() => {
+    setIsTyping(true);
+    const timer = setTimeout(() => {
+      setMessages([
+        {
+          id: "m-step-1",
+          sender: "agent",
+          step: 1,
+          text: "Tell me anything you remember about the photo, even if it's fuzzy. Was it more of a happy, calm, or busy moment?",
+          chips: [
+            "Happy and loud",
+            "Calm and quiet",
+            "Busy and chaotic",
+            "Not sure",
+          ],
+        },
+      ]);
+      setIsTyping(false);
+    }, 750);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Compute and update ranked clusters
+  const refreshClusters = (
+    nextMood = moodAnswer,
+    nextTimeline = timelineAnswer,
+    nextClue = clueAnswer,
+    nextNarrow = narrowingAnswer,
+    nextExcluded = excludedClusterIds
+  ) => {
+    const scored = scoreAndRankClusters(
+      {
+        moodAnswer: nextMood,
+        timelineAnswer: nextTimeline,
+        clueAnswer: nextClue,
+        narrowingAnswer: nextNarrow,
+      },
+      nextExcluded
+    );
+    const top3 = scored.slice(0, 3);
+    setActiveClusters(top3);
+
+    // Pick narrowing question from top candidate
+    if (top3.length > 0 && top3[0].narrowingClue) {
+      setActiveNarrowingQ(top3[0].narrowingClue);
+    } else {
+      setActiveNarrowingQ("Was there water or snow in the background?");
+    }
+    return top3;
+  };
+
+  // Transition to next conversational step with typing simulation
+  const handleUserAnswer = (answer: string) => {
+    if (!answer.trim() || isTyping) return;
+
+    const trimmed = answer.trim();
+    const userMsgId = `user-${Date.now()}`;
+    const nextMsgs: Message[] = [
+      ...messages,
+      { id: userMsgId, sender: "user", text: trimmed },
+    ];
+    setMessages(nextMsgs);
+    setInputText("");
+    setIsTyping(true);
+
+    // STEP 1 -> STEP 2
+    if (currentStep === 1) {
+      setMoodAnswer(trimmed);
+      setTimeout(() => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `agent-step-2`,
+            sender: "agent",
+            step: 2,
+            text: "Got it. Roughly when was it? This year, last year, or a while ago?",
+            chips: ["This year", "Last year", "A while ago", "No idea"],
+          },
+        ]);
+        setCurrentStep(2);
+        setIsTyping(false);
+      }, 750);
+    }
+    // STEP 2 -> STEP 3
+    else if (currentStep === 2) {
+      setTimelineAnswer(trimmed);
+      setTimeout(() => {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `agent-step-3`,
+            sender: "agent",
+            step: 3,
+            text: "What was around you? People, food, nature, or somewhere indoors?",
+            chips: ["People", "Food", "Nature", "Indoors"],
+          },
+        ]);
+        setCurrentStep(3);
+        setIsTyping(false);
+      }, 800);
+    }
+    // STEP 3 -> STEP 4 (Show clusters & Step 5 Narrowing Question)
+    else if (currentStep === 3) {
+      setClueAnswer(trimmed);
+      setTimeout(() => {
+        const topClusters = refreshClusters(moodAnswer, timelineAnswer, trimmed, "");
+        const narrowingQ =
+          topClusters.length > 0 && topClusters[0].narrowingClue
+            ? topClusters[0].narrowingClue
+            : "Was there water or snow in the background?";
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `agent-step-4`,
+            sender: "agent",
+            step: 4,
+            text: "Based on what you shared, I grouped your memories into 3 likely moments. Which one feels closest?",
+            clusters: topClusters,
+            narrowingQuestion: narrowingQ,
+            narrowingChips: [
+              "Yes, definitely",
+              "No, something else",
+              "Not sure",
+            ],
+          },
+        ]);
+        setCurrentStep(4);
+        setIsTyping(false);
+      }, 900);
+    }
+    // STEP 5 Narrowing Answer
+    else if (currentStep === 4) {
+      setNarrowingAnswer(trimmed);
+      setTimeout(() => {
+        const updated = refreshClusters(
+          moodAnswer,
+          timelineAnswer,
+          clueAnswer,
+          trimmed,
+          excludedClusterIds
+        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `agent-narrowed-${Date.now()}`,
+            sender: "agent",
+            step: 4,
+            text: "Updated recommendations based on your answer:",
+            clusters: updated,
+          },
+        ]);
+        setIsTyping(false);
+      }, 700);
+    }
+  };
+
+  // STEP 5 "Not this" handler: removes that group and reveals next-best one
+  const handleNotThis = (clusterId: string) => {
+    const nextExcluded = [...excludedClusterIds, clusterId];
+    setExcludedClusterIds(nextExcluded);
+    const updated = refreshClusters(
+      moodAnswer,
+      timelineAnswer,
+      clueAnswer,
+      narrowingAnswer,
+      nextExcluded
+    );
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `agent-not-this-${Date.now()}`,
+        sender: "agent",
+        step: 4,
+        text: "Removed that group. Here is the next closest match:",
+        clusters: updated,
+      },
+    ]);
+  };
+
+  // STEP 6 "This looks right" handler: highlights in gallery, opens lightbox, shows found message
+  const handleThisLooksRight = (cluster: ScoredCluster) => {
+    const targetPhoto = cluster.photos[0] || DEMO_PHOTOS[0];
+    setFoundPhoto(targetPhoto);
+    setCurrentStep(6);
+    setIsTyping(true);
+
+    if (onHighlightPhoto) {
+      onHighlightPhoto(targetPhoto.id);
+    }
+
+    setTimeout(() => {
+      const monthYear = formatMonthYear(targetPhoto.date);
+      const foundText = `Found it. This looks like ${targetPhoto.title}, ${targetPhoto.place}, ${monthYear}.`;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `agent-found-${Date.now()}`,
+          sender: "agent",
+          step: 6,
+          text: foundText,
+          foundPhoto: targetPhoto,
+        },
+      ]);
+      setIsTyping(false);
+
+      // Open in lightbox
+      onSelectFoundPhoto(targetPhoto);
+    }, 700);
+  };
+
+  // "Start over" button handler
+  const handleStartOver = () => {
+    setCurrentStep(1);
+    setMoodAnswer("");
+    setTimelineAnswer("");
+    setClueAnswer("");
+    setNarrowingAnswer("");
+    setExcludedClusterIds([]);
+    setActiveClusters([]);
+    setFoundPhoto(null);
+    if (onHighlightPhoto) {
+      onHighlightPhoto(null);
+    }
+
+    setIsTyping(true);
+    setTimeout(() => {
+      setMessages([
+        {
+          id: `restart-${Date.now()}`,
+          sender: "agent",
+          step: 1,
+          text: "Tell me anything you remember about the photo, even if it's fuzzy. Was it more of a happy, calm, or busy moment?",
+          chips: [
+            "Happy and loud",
+            "Calm and quiet",
+            "Busy and chaotic",
+            "Not sure",
+          ],
+        },
+      ]);
+      setIsTyping(false);
+    }, 600);
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputText.trim()) {
+      handleUserAnswer(inputText.trim());
+    }
+  };
 
   return (
-    <section className="ai-question-results-panel" aria-label="Ask Photos AI Assistant">
-      {/* Header with Query & Status */}
-      <div className="ai-panel-header">
-        <div className="ai-badge-group">
-          <div className="sparkle-circle">
-            <SparklesIcon size={16} />
+    <section className="recall-agent-panel" aria-label="Recall AI Conversational Assistant">
+      {/* Top Header */}
+      <div className="agent-header">
+        <div className="agent-header-left">
+          <div className="sparkle-avatar">
+            <SparklesIcon size={18} />
           </div>
-          <div className="ai-header-titles">
-            <h3 className="ai-header-title">Ask Photos AI</h3>
-            <span className="ai-query-sub">Exploring memories for &quot;{query}&quot;</span>
+          <div className="agent-title-col">
+            <div className="title-row">
+              <h3 className="agent-title">Recall AI</h3>
+              <span className="live-chip">Conversational Retrieval</span>
+            </div>
+            <p className="agent-subtitle">
+              Finding photos from fuzzy human memories — no keywords required
+            </p>
           </div>
         </div>
 
-        <div className="ai-header-meta">
-          {elapsedMs !== undefined && elapsedMs > 0 && (
-            <span className="meta-pill">
-              <ClockIcon size={12} />
-              {elapsedMs}ms
-            </span>
-          )}
-          {confidence && (
-            <span className={`meta-pill conf-${confidence}`}>
-              {confidence} match
-            </span>
-          )}
+        <div className="agent-header-actions">
           <button
             type="button"
-            className="panel-close-btn"
-            onClick={onClose}
-            aria-label="Close AI results"
+            className="header-icon-btn"
+            onClick={handleStartOver}
+            title="Start over"
           >
-            ✕
+            <RefreshCwIcon size={15} />
+            <span className="btn-label-text">Restart</span>
+          </button>
+          <button
+            type="button"
+            className="header-close-btn"
+            onClick={onClose}
+            aria-label="Close Recall AI panel"
+          >
+            <CloseIcon size={18} />
           </button>
         </div>
       </div>
 
-      {/* STEP 1: AI Asks Clarifying Question */}
-      {turnsUsed <= maxTurns && (
-        <div className="ai-question-box">
-          <div className="ai-prompt-row">
-            <span className="ai-bot-label">✨ Clarifying Question (Turn {turnsUsed}/{maxTurns}):</span>
-            <p className="ai-question-text">{displayQuestion}</p>
-          </div>
+      {/* Messages Scroll Area */}
+      <div className="chat-messages-container">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`chat-message-row ${msg.sender}`}>
+            {msg.sender === "agent" && (
+              <div className="message-avatar">
+                <SparklesIcon size={14} />
+              </div>
+            )}
 
-          <div className="ai-chips-grid">
-            {displayChips.map((chip, idx) => (
-              <button
-                key={idx}
-                type="button"
-                className="ai-answer-chip"
-                onClick={() => onSelectAnswer(chip)}
-                disabled={isLoading}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+            <div className={`chat-bubble ${msg.sender}`}>
+              <p className="bubble-text">{msg.text}</p>
 
-      {/* Loading Indicator */}
-      {isLoading && (
-        <div className="ai-thinking-row">
-          <div className="ai-spinner" />
-          <span>Ask Photos AI is searching visual embeddings and chronological episodes…</span>
-        </div>
-      )}
-
-      {/* STEP 2: Results Display (Episode Clusters / Candidates) */}
-      {clusters.length > 0 && (
-        <div className="ai-results-body">
-          <div className="results-subheading-row">
-            <span className="results-found-label">
-              Found {clusters.length} Matching Episode{clusters.length > 1 ? "s" : ""} ({allPhotos.length} photos)
-            </span>
-          </div>
-
-          <div className="clusters-grid">
-            {clusters.map((cluster, cIdx) => (
-              <div key={`cluster-${cIdx}`} className="cluster-result-card">
-                <div className="cluster-info-bar">
-                  <h4 className="cluster-title">{cluster.name}</h4>
-                  <p className="cluster-reason">{cluster.match_reason}</p>
+              {/* Tappable Suggestion Chips */}
+              {msg.chips && msg.chips.length > 0 && currentStep === msg.step && !isTyping && (
+                <div className="chips-wrapper">
+                  {msg.chips.map((chip, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="suggestion-chip"
+                      onClick={() => handleUserAnswer(chip)}
+                    >
+                      {chip}
+                    </button>
+                  ))}
                 </div>
+              )}
 
-                <div className="cluster-photos-row">
-                  {(cluster.photos || []).slice(0, 6).map((photo) => {
-                    const imgSrc = getPhotoImageUrl(photo);
-                    const fallback = getPhotoFallbackSvg(photo);
-
-                    return (
-                      <div
-                        key={photo.id}
-                        className="photo-match-tile"
-                        onClick={() => onPhotoClick(photo)}
-                      >
-                        <img
-                          src={imgSrc || fallback}
-                          alt={photo.caption || photo.filename}
-                          className="match-img"
-                          onError={(e) => {
-                            if (fallback) (e.target as HTMLImageElement).src = fallback;
-                          }}
-                        />
-
-                        {/* Quick Confirm / Anchor Overlay */}
-                        <div className="tile-hover-actions">
-                          <button
-                            type="button"
-                            className="hover-action-btn confirm"
-                            title="That's it! (Confirm found)"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onConfirmPhoto(photo);
-                            }}
-                          >
-                            <CheckIcon size={12} />
-                            <span>Found</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="hover-action-btn anchor"
-                            title="Timeline Anchor"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onAnchorPhoto(photo);
-                            }}
-                          >
-                            <AnchorIcon size={12} />
-                          </button>
+              {/* Step 4 & 5: Ranked Groups Display */}
+              {msg.clusters && msg.clusters.length > 0 && (
+                <div className="clusters-container">
+                  {msg.clusters.map((cluster) => (
+                    <div key={cluster.id} className="cluster-item-card">
+                      <div className="cluster-header-line">
+                        <div className="cluster-meta">
+                          <h4 className="cluster-name">{cluster.name}</h4>
+                          <p className="cluster-reason">{cluster.reason}</p>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
 
-                {/* Feedback Reactions */}
-                <div className="cluster-feedback-actions">
-                  <button
-                    type="button"
-                    className="feedback-btn"
-                    onClick={() => onFeedback("not_this", cluster.photo_ids || [])}
-                  >
-                    ✕ Not this episode
-                  </button>
-                  <button
-                    type="button"
-                    className="feedback-btn highlight"
-                    onClick={() => onFeedback("more_like_this", [], cluster.name)}
-                  >
-                    ✦ More like this
-                  </button>
+                      {/* Photo Thumbnail Strip */}
+                      <div className="cluster-thumbnails-row">
+                        {cluster.photos.map((photo) => (
+                          <div
+                            key={photo.id}
+                            className="thumb-wrapper"
+                            onClick={() => onSelectFoundPhoto(photo)}
+                            title={`Click to preview: ${photo.title}`}
+                          >
+                            <img
+                              src={photo.src || (photo as any).url || ""}
+                              alt={photo.title}
+                              className="thumb-image"
+                              loading="lazy"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Cluster Decision Action Buttons */}
+                      <div className="cluster-actions-row">
+                        <button
+                          type="button"
+                          className="btn-not-this"
+                          onClick={() => handleNotThis(cluster.id)}
+                        >
+                          ✕ Not this
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-this-looks-right"
+                          onClick={() => handleThisLooksRight(cluster)}
+                        >
+                          <CheckIcon size={14} />
+                          This looks right
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Step 5 Narrowing Question inside cluster card message */}
+                  {msg.narrowingQuestion && currentStep === 4 && !isTyping && (
+                    <div className="narrowing-question-box">
+                      <div className="narrowing-prompt-row">
+                        <span className="narrow-badge">Narrowing clue:</span>
+                        <p className="narrow-text">{msg.narrowingQuestion}</p>
+                      </div>
+                      {msg.narrowingChips && (
+                        <div className="narrow-chips-list">
+                          {msg.narrowingChips.map((chip, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              className="suggestion-chip narrow"
+                              onClick={() => handleUserAnswer(chip)}
+                            >
+                              {chip}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              )}
+
+              {/* Step 6 Found Photo Card & Start Over */}
+              {msg.foundPhoto && (
+                <div className="found-photo-preview-card">
+                  <div
+                    className="found-photo-thumb"
+                    onClick={() => onSelectFoundPhoto(msg.foundPhoto!)}
+                  >
+                    <img
+                      src={msg.foundPhoto.src || (msg.foundPhoto as any).url || ""}
+                      alt={msg.foundPhoto.title}
+                      className="found-img"
+                    />
+                    <div className="found-tag-badge">
+                      <span>✓ Best Match Highlighted</span>
+                    </div>
+                  </div>
+                  <div className="found-card-details">
+                    <h5 className="found-card-title">{msg.foundPhoto.title}</h5>
+                    <p className="found-card-meta">
+                      📍 {msg.foundPhoto.place} • 📅 {formatMonthYear(msg.foundPhoto.date)}
+                    </p>
+                    <div className="found-btn-row">
+                      <button
+                        type="button"
+                        className="btn-open-lightbox"
+                        onClick={() => onSelectFoundPhoto(msg.foundPhoto!)}
+                      >
+                        Open Fullscreen Lightbox
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-restart-search"
+                        onClick={handleStartOver}
+                      >
+                        Start over
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        ))}
+
+        {/* Typing indicator (600-900ms) */}
+        {isTyping && (
+          <div className="chat-message-row agent typing-row">
+            <div className="message-avatar">
+              <SparklesIcon size={14} />
+            </div>
+            <div className="chat-bubble agent typing-bubble">
+              <div className="typing-dot" />
+              <div className="typing-dot" />
+              <div className="typing-dot" />
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Free-Text Input Bar at Bottom */}
+      <form onSubmit={handleFormSubmit} className="chat-input-bar">
+        <input
+          ref={inputRef}
+          type="text"
+          className="chat-text-input"
+          placeholder={
+            currentStep === 1
+              ? "e.g. 'calm sunset', 'busy party with lots of music'..."
+              : currentStep === 2
+              ? "e.g. 'about last year', 'two years ago'..."
+              : currentStep === 3
+              ? "e.g. 'we were eating hot momos and chai outdoors'..."
+              : "Type any other memory clue..."
+          }
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          disabled={isTyping}
+        />
+        <button
+          type="submit"
+          className="chat-send-btn"
+          disabled={!inputText.trim() || isTyping}
+          aria-label="Send answer"
+        >
+          <span>Send</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </form>
 
       <style jsx>{`
-        .ai-question-results-panel {
+        .recall-agent-panel {
           background: #ffffff;
-          border: 1px solid #c2e7ff;
+          border: 1px solid #d3e3fd;
           border-radius: 20px;
-          padding: 16px 20px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
           margin-bottom: 24px;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 0 1px #d3e3fd;
           display: flex;
           flex-direction: column;
-          gap: 16px;
-          animation: slideUp 0.18s ease-out;
+          overflow: hidden;
+          transition: all 0.25s ease;
         }
 
-        .ai-panel-header {
+        /* Header */
+        .agent-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          padding: 14px 20px;
+          background: #f0f4f9;
           border-bottom: 1px solid #e0e2ec;
-          padding-bottom: 12px;
         }
 
-        .ai-badge-group {
+        .agent-header-left {
           display: flex;
           align-items: center;
-          gap: 10px;
-        }
-
-        .sparkle-circle {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #ea4335 0%, #a855f7 50%, #4285f4 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #ffffff;
-        }
-
-        .ai-header-titles {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .ai-header-title {
-          font-size: 15px;
-          font-weight: 700;
-          color: #1f1f1f;
-        }
-
-        .ai-query-sub {
-          font-size: 12px;
-          color: #444746;
-        }
-
-        .ai-header-meta {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .meta-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 11px;
-          font-weight: 600;
-          padding: 4px 10px;
-          border-radius: 12px;
-          background: #f0f4f9;
-          color: #444746;
-        }
-
-        .meta-pill.conf-high {
-          background: #e6f4ea;
-          color: #137333;
-        }
-        .meta-pill.conf-medium {
-          background: #fef7e0;
-          color: #b06000;
-        }
-        .meta-pill.conf-low {
-          background: #fce8e6;
-          color: #c5221f;
-        }
-
-        .panel-close-btn {
-          background: #f0f4f9;
-          border: none;
-          color: #444746;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          cursor: pointer;
-          font-size: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.15s ease;
-        }
-
-        .panel-close-btn:hover {
-          color: #1f1f1f;
-          background: #e0e2ec;
-        }
-
-        /* Question Box */
-        .ai-question-box {
-          background: #f3e8fd;
-          border: 1px solid #d8b4fe;
-          border-radius: 14px;
-          padding: 14px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .ai-prompt-row {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .ai-bot-label {
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          color: #7e22ce;
-        }
-
-        .ai-question-text {
-          font-size: 14px;
-          font-weight: 600;
-          color: #1f1f1f;
-        }
-
-        .ai-chips-grid {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-
-        .ai-answer-chip {
-          background: #ffffff;
-          border: 1px solid #c084fc;
-          color: #6b21a8;
-          padding: 6px 14px;
-          border-radius: 18px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        }
-
-        .ai-answer-chip:hover {
-          background: #7e22ce;
-          color: #ffffff;
-          border-color: #7e22ce;
-        }
-
-        .ai-thinking-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 13px;
-          color: #7e22ce;
-          font-weight: 500;
-        }
-
-        .ai-spinner {
-          width: 14px;
-          height: 14px;
-          border: 2px solid #d8b4fe;
-          border-top-color: #7e22ce;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-        }
-
-        /* Results Body */
-        .ai-results-body {
-          display: flex;
-          flex-direction: column;
           gap: 12px;
         }
 
-        .results-subheading-row {
-          font-size: 13px;
-          font-weight: 600;
-          color: #444746;
+        .sparkle-avatar {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #1a73e8, #7c3aed);
+          color: #ffffff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 6px rgba(26, 115, 232, 0.3);
         }
 
-        .clusters-grid {
+        .agent-title-col {
           display: flex;
           flex-direction: column;
-          gap: 14px;
         }
 
-        .cluster-result-card {
-          background: #f8fafd;
-          border: 1px solid #e0e2ec;
+        .title-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .agent-title {
+          font-size: 16px;
+          font-weight: 600;
+          color: #1f1f1f;
+          margin: 0;
+        }
+
+        .live-chip {
+          font-size: 11px;
+          font-weight: 500;
+          color: #0b57d0;
+          background: #c2e7ff;
+          padding: 2px 8px;
+          border-radius: 12px;
+        }
+
+        .agent-subtitle {
+          font-size: 12px;
+          color: #444746;
+          margin: 2px 0 0 0;
+        }
+
+        .agent-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .header-icon-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          background: #ffffff;
+          border: 1px solid #c4c7c5;
+          border-radius: 16px;
+          font-size: 12px;
+          font-weight: 500;
+          color: #1f1f1f;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .header-icon-btn:hover {
+          background: #e9eef6;
+        }
+
+        .header-close-btn {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: transparent;
+          border: none;
+          color: #444746;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .header-close-btn:hover {
+          background: #e0e2ec;
+          color: #1f1f1f;
+        }
+
+        /* Messages Container */
+        .chat-messages-container {
+          padding: 20px;
+          max-height: 440px;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          background: #ffffff;
+        }
+
+        .chat-message-row {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          width: 100%;
+        }
+
+        .chat-message-row.user {
+          justify-content: flex-end;
+        }
+
+        .message-avatar {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: #e8f0fe;
+          color: #1a73e8;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          margin-top: 4px;
+        }
+
+        .chat-bubble {
+          max-width: 85%;
+          padding: 12px 16px;
+          border-radius: 18px;
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .chat-bubble.agent {
+          background: #f0f4f9;
+          color: #1f1f1f;
+          border-top-left-radius: 4px;
+        }
+
+        .chat-bubble.user {
+          background: #c2e7ff;
+          color: #001d35;
+          border-top-right-radius: 4px;
+          font-weight: 500;
+        }
+
+        .bubble-text {
+          margin: 0;
+        }
+
+        /* Suggestion Chips */
+        .chips-wrapper {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .suggestion-chip {
+          padding: 7px 14px;
+          background: #ffffff;
+          border: 1px solid #747775;
+          color: #1f1f1f;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          user-select: none;
+        }
+
+        .suggestion-chip:hover {
+          background: #e8f0fe;
+          border-color: #0b57d0;
+          color: #0b57d0;
+          transform: translateY(-1px);
+        }
+
+        /* Typing Bubble */
+        .typing-bubble {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 12px 18px;
+          width: fit-content;
+        }
+
+        .typing-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #0b57d0;
+          animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-dot:nth-child(1) {
+          animation-delay: -0.32s;
+        }
+        .typing-dot:nth-child(2) {
+          animation-delay: -0.16s;
+        }
+
+        @keyframes bounce {
+          0%, 80%, 100% {
+            transform: scale(0);
+            opacity: 0.4;
+          }
+          40% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+
+        /* Clusters Container */
+        .clusters-container {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-top: 14px;
+          width: 100%;
+        }
+
+        .cluster-item-card {
+          background: #ffffff;
+          border: 1px solid #c4c7c5;
           border-radius: 14px;
           padding: 14px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+          transition: border-color 0.15s ease;
         }
 
-        .cluster-title {
-          font-size: 14px;
-          font-weight: 700;
+        .cluster-item-card:hover {
+          border-color: #0b57d0;
+        }
+
+        .cluster-header-line {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        }
+
+        .cluster-name {
+          font-size: 15px;
+          font-weight: 600;
           color: #1f1f1f;
+          margin: 0;
         }
 
         .cluster-reason {
           font-size: 12px;
           color: #444746;
+          margin: 2px 0 0 0;
         }
 
-        .cluster-photos-row {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        .cluster-thumbnails-row {
+          display: flex;
           gap: 8px;
+          overflow-x: auto;
+          padding-bottom: 6px;
         }
 
-        .photo-match-tile {
+        .thumb-wrapper {
           position: relative;
-          aspect-ratio: 1 / 1;
-          border-radius: 10px;
+          width: 72px;
+          height: 72px;
+          border-radius: 8px;
           overflow: hidden;
-          background: #e0e2ec;
+          flex-shrink: 0;
           cursor: pointer;
+          background: #e0e2ec;
+          border: 1px solid rgba(0, 0, 0, 0.06);
+          transition: transform 0.15s ease;
         }
 
-        .match-img {
+        .thumb-wrapper:hover {
+          transform: scale(1.05);
+        }
+
+        .thumb-image {
           width: 100%;
           height: 100%;
           object-fit: cover;
-          transition: transform 0.25s ease;
         }
 
-        .photo-match-tile:hover .match-img {
-          transform: scale(1.06);
-        }
-
-        .tile-hover-actions {
-          position: absolute;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.5);
-          opacity: 0;
+        .cluster-actions-row {
           display: flex;
           align-items: center;
-          justify-content: center;
-          gap: 6px;
-          transition: opacity 0.15s ease;
-        }
-
-        .photo-match-tile:hover .tile-hover-actions {
-          opacity: 1;
-        }
-
-        .hover-action-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          border: none;
-          padding: 5px 10px;
-          border-radius: 16px;
-          font-size: 11px;
-          font-weight: 600;
-          cursor: pointer;
-          color: #ffffff;
-        }
-
-        .hover-action-btn.confirm {
-          background: #188038;
-        }
-
-        .hover-action-btn.anchor {
-          background: #1a73e8;
-        }
-
-        .cluster-feedback-actions {
-          display: flex;
           gap: 8px;
+          margin-top: 10px;
+          padding-top: 8px;
+          border-top: 1px solid #f0f4f9;
         }
 
-        .feedback-btn {
-          background: #ffffff;
-          border: 1px solid #d3e3fd;
-          color: #444746;
-          font-size: 11px;
+        .btn-not-this {
+          padding: 6px 12px;
+          background: transparent;
+          border: 1px solid #747775;
+          border-radius: 16px;
+          font-size: 12px;
           font-weight: 500;
-          padding: 4px 10px;
-          border-radius: 14px;
+          color: #444746;
           cursor: pointer;
           transition: all 0.15s ease;
         }
 
-        .feedback-btn:hover {
-          background: #f0f4f9;
-          color: #1f1f1f;
+        .btn-not-this:hover {
+          background: #fde8e8;
+          border-color: #ba1a1a;
+          color: #ba1a1a;
         }
 
-        .feedback-btn.highlight {
-          border-color: #a8c7fa;
-          color: #0b57d0;
+        .btn-this-looks-right {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 14px;
+          background: #0b57d0;
+          border: none;
+          border-radius: 16px;
+          font-size: 12px;
+          font-weight: 500;
+          color: #ffffff;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .btn-this-looks-right:hover {
+          background: #0842a0;
+        }
+
+        /* Narrowing Question Box */
+        .narrowing-question-box {
           background: #e8f0fe;
+          border-radius: 12px;
+          padding: 12px 14px;
+          margin-top: 6px;
+        }
+
+        .narrowing-prompt-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .narrow-badge {
+          font-size: 11px;
+          font-weight: 600;
+          color: #0b57d0;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+
+        .narrow-text {
+          font-size: 13px;
+          font-weight: 500;
+          color: #1f1f1f;
+          margin: 0;
+        }
+
+        .narrow-chips-list {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        /* Found Photo Preview Card */
+        .found-photo-preview-card {
+          margin-top: 14px;
+          background: #ffffff;
+          border: 2px solid #0b57d0;
+          border-radius: 16px;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 4px 16px rgba(11, 87, 208, 0.18);
+        }
+
+        .found-photo-thumb {
+          position: relative;
+          width: 100%;
+          height: 180px;
+          cursor: pointer;
+          background: #1e1f20;
+        }
+
+        .found-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .found-tag-badge {
+          position: absolute;
+          top: 10px;
+          left: 10px;
+          background: #0b57d0;
+          color: #ffffff;
+          font-size: 12px;
+          font-weight: 600;
+          padding: 4px 10px;
+          border-radius: 12px;
+        }
+
+        .found-card-details {
+          padding: 14px 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .found-card-title {
+          font-size: 16px;
+          font-weight: 600;
+          color: #1f1f1f;
+          margin: 0;
+        }
+
+        .found-card-meta {
+          font-size: 13px;
+          color: #444746;
+          margin: 0;
+        }
+
+        .found-btn-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-top: 10px;
+        }
+
+        .btn-open-lightbox {
+          flex: 1;
+          padding: 8px 14px;
+          background: #0b57d0;
+          color: #ffffff;
+          border: none;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .btn-open-lightbox:hover {
+          background: #0842a0;
+        }
+
+        .btn-restart-search {
+          padding: 8px 16px;
+          background: transparent;
+          border: 1px solid #747775;
+          color: #1f1f1f;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .btn-restart-search:hover {
+          background: #f0f4f9;
+        }
+
+        /* Bottom Free-Text Input Bar */
+        .chat-input-bar {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 16px;
+          background: #f0f4f9;
+          border-top: 1px solid #e0e2ec;
+        }
+
+        .chat-text-input {
+          flex: 1;
+          height: 42px;
+          padding: 0 16px;
+          border-radius: 24px;
+          border: 1px solid #c4c7c5;
+          background: #ffffff;
+          font-size: 14px;
+          color: #1f1f1f;
+          outline: none;
+          transition: border-color 0.15s ease;
+        }
+
+        .chat-text-input:focus {
+          border-color: #0b57d0;
+          box-shadow: 0 0 0 1px #0b57d0;
+        }
+
+        .chat-send-btn {
+          height: 42px;
+          padding: 0 16px;
+          border-radius: 24px;
+          background: #0b57d0;
+          border: none;
+          color: #ffffff;
+          font-size: 13px;
+          font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          transition: background 0.15s ease, opacity 0.15s ease;
+        }
+
+        .chat-send-btn:hover:not(:disabled) {
+          background: #0842a0;
+        }
+
+        .chat-send-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        /* Responsive Mobile Styles */
+        @media (max-width: 640px) {
+          .recall-agent-panel {
+            border-radius: 14px;
+            margin-bottom: 16px;
+          }
+
+          .agent-header {
+            padding: 10px 14px;
+          }
+
+          .agent-subtitle {
+            display: none;
+          }
+
+          .chat-messages-container {
+            padding: 14px;
+            max-height: 380px;
+          }
+
+          .chat-bubble {
+            max-width: 95%;
+            font-size: 13px;
+          }
+
+          .btn-label-text {
+            display: none;
+          }
+
+          .cluster-item-card {
+            padding: 10px;
+          }
+
+          .found-photo-thumb {
+            height: 140px;
+          }
+
+          .found-btn-row {
+            flex-direction: column;
+            width: 100%;
+          }
+
+          .btn-open-lightbox, .btn-restart-search {
+            width: 100%;
+            text-align: center;
+          }
         }
       `}</style>
     </section>

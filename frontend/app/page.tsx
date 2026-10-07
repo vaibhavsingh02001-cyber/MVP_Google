@@ -43,163 +43,11 @@ import {
   BannerSparkleIcon,
   CloseIcon,
 } from "@/components/Icons";
+import { DEMO_PHOTOS, DEMO_STORY_ALBUMS } from "@/data/demo-photos";
 
-// Rich initial demo library photos
-const INITIAL_DEMO_PHOTOS: Photo[] = [
-  {
-    id: "kyoto_01",
-    filename: "kyoto_01.jpg",
-    timestamp: "2024-08-14T12:14:00",
-    location_label: "Delhi / Lodhi Garden",
-    caption: "This beautiful world - girl posing near lake with green sweater",
-    objects: ["girl", "green sweater", "lake", "trees", "park"],
-    mood_tags: ["scenic", "candid", "sunny"],
-    purpose_tag: "memory",
-    episode_label: "Best of August",
-  },
-  {
-    id: "beach_01",
-    filename: "beach_01.jpg",
-    timestamp: "2024-08-14T17:45:00",
-    location_label: "Goa Beach",
-    caption: "Golden hour over the ocean with palm shack",
-    objects: ["beach", "shack", "ocean", "sunset"],
-    mood_tags: ["warm", "golden hour", "cozy"],
-    purpose_tag: "memory",
-    episode_label: "Golden hour",
-  },
-  {
-    id: "everyday_01",
-    filename: "everyday_01.jpg",
-    timestamp: "2024-08-10T14:30:00",
-    location_label: "Cafe & Campus",
-    caption: "Friends talking near forest trail during vacation",
-    objects: ["friends", "trail", "forest", "nature"],
-    mood_tags: ["lively", "memories"],
-    purpose_tag: "memory",
-    episode_label: "This beautiful world",
-  },
-  {
-    id: "sick_01",
-    filename: "sick_01.jpg",
-    timestamp: "2024-08-08T10:15:00",
-    location_label: "University / Study",
-    caption: "Semester grading sheets and course credits summary table",
-    objects: ["table", "grades", "receipt", "document", "credits"],
-    mood_tags: ["study", "notes"],
-    purpose_tag: "receipt",
-    episode_label: "Academics",
-  },
-  {
-    id: "sick_02",
-    filename: "sick_02.jpg",
-    timestamp: "2024-08-08T11:00:00",
-    location_label: "University / Study",
-    caption: "Customer relationship management term evaluation marks table",
-    objects: ["grades", "marks", "document", "table"],
-    mood_tags: ["study", "proof"],
-    purpose_tag: "proof",
-    episode_label: "Academics",
-  },
-  {
-    id: "beach_02",
-    filename: "beach_02.jpg",
-    timestamp: "2024-08-05T16:20:00",
-    location_label: "Goa Diaries",
-    caption: "Selfie in car wearing sunglasses and printed shirt",
-    objects: ["selfie", "sunglasses", "car", "friends"],
-    mood_tags: ["cool", "summer"],
-    purpose_tag: "memory",
-    episode_label: "Goa Diaries",
-  },
-  {
-    id: "beach_03",
-    filename: "beach_03.jpg",
-    timestamp: "2024-08-05T18:00:00",
-    location_label: "Goa Diaries",
-    caption: "Night club lights and neon signs in Goa",
-    objects: ["neon", "lights", "night", "club"],
-    mood_tags: ["nightlife", "fun"],
-    purpose_tag: "memory",
-    episode_label: "Goa Diaries",
-  },
-  {
-    id: "kyoto_02",
-    filename: "kyoto_02.jpg",
-    timestamp: "2023-11-14T09:20:00",
-    location_label: "Kyoto, Japan",
-    caption: "Rainy morning view from cozy coffee shop with receipt",
-    objects: ["coffee", "cup", "rain", "receipt", "window"],
-    mood_tags: ["rainy", "cozy", "zen"],
-    purpose_tag: "receipt",
-    episode_label: "Kyoto Autumn",
-  },
-  {
-    id: "iceland_01",
-    filename: "iceland_01.jpg",
-    timestamp: "2024-04-10T14:00:00",
-    location_label: "Reykjavik, Iceland",
-    caption: "Rental car flat tire near waterfall landscape",
-    objects: ["car", "waterfall", "ice", "mountain"],
-    mood_tags: ["dramatic", "cold"],
-    purpose_tag: "receipt",
-    episode_label: "Iceland Expedition",
-  },
-  {
-    id: "wedding_01",
-    filename: "wedding_01.jpg",
-    timestamp: "2023-06-02T18:40:00",
-    location_label: "Napa Valley",
-    caption: "Mom cutting cake under fairy lights celebrating birthday",
-    objects: ["cake", "lights", "mom", "birthday"],
-    mood_tags: ["warm", "celebration"],
-    purpose_tag: "memory",
-    episode_label: "Family Milestones",
-  },
-];
-
-const INITIAL_DEMO_STORIES: StoryAlbum[] = [
-  {
-    id: "story-1",
-    title: "Best of August",
-    subtitle: "AUG",
-    photo_count: 18,
-    cover_photo: INITIAL_DEMO_PHOTOS[0],
-    photos: [INITIAL_DEMO_PHOTOS[0], INITIAL_DEMO_PHOTOS[2]],
-  },
-  {
-    id: "story-2",
-    title: "This beautiful world",
-    subtitle: "Recent highlights",
-    photo_count: 24,
-    cover_photo: INITIAL_DEMO_PHOTOS[2],
-    photos: [INITIAL_DEMO_PHOTOS[2], INITIAL_DEMO_PHOTOS[0]],
-  },
-  {
-    id: "story-3",
-    title: "Golden hour",
-    subtitle: "Over the years",
-    photo_count: 15,
-    cover_photo: INITIAL_DEMO_PHOTOS[1],
-    photos: [INITIAL_DEMO_PHOTOS[1], INITIAL_DEMO_PHOTOS[5]],
-  },
-  {
-    id: "story-4",
-    title: "Goa Diaries",
-    subtitle: "Trip Memories",
-    photo_count: 32,
-    cover_photo: INITIAL_DEMO_PHOTOS[5],
-    photos: [INITIAL_DEMO_PHOTOS[5], INITIAL_DEMO_PHOTOS[6]],
-  },
-  {
-    id: "story-5",
-    title: "Trip to Kyoto",
-    subtitle: "Autumn in Japan",
-    photo_count: 14,
-    cover_photo: INITIAL_DEMO_PHOTOS[7],
-    photos: [INITIAL_DEMO_PHOTOS[7]],
-  },
-];
+// Seed demo library photos (24 items across 8 themes)
+const INITIAL_DEMO_PHOTOS: Photo[] = DEMO_PHOTOS as unknown as Photo[];
+const INITIAL_DEMO_STORIES: StoryAlbum[] = DEMO_STORY_ALBUMS as unknown as StoryAlbum[];
 
 export default function RecallApp() {
   // Session Identity & Mode
@@ -212,9 +60,13 @@ export default function RecallApp() {
   const [uiState, setUiState] = useState<UIState>("idle");
   const [activeSidebarItem, setActiveSidebarItem] = useState<string>("photos");
   const [showPersonalizedBanner, setShowPersonalizedBanner] = useState<boolean>(true);
-  const [showEmptyHero, setShowEmptyHero] = useState<boolean>(true);
+  const [showEmptyHero, setShowEmptyHero] = useState<boolean>(false);
 
-  // Gallery Feed State
+  // Recall Agent Modal / Inline Panel & Highlight
+  const [isAgentOpen, setIsAgentOpen] = useState<boolean>(false);
+  const [highlightedPhotoId, setHighlightedPhotoId] = useState<string | null>(null);
+
+  // Gallery Feed State (Seeded with 24 demo photos)
   const [feedPhotos, setFeedPhotos] = useState<Photo[]>(INITIAL_DEMO_PHOTOS);
   const [feedStories, setFeedStories] = useState<StoryAlbum[]>(INITIAL_DEMO_STORIES);
 
@@ -296,7 +148,9 @@ export default function RecallApp() {
     setConfirmedPhoto(null);
     setExcludedIds([]);
     setActiveSidebarItem("photos");
-    setShowEmptyHero(true);
+    setShowEmptyHero(false);
+    setIsAgentOpen(false);
+    setHighlightedPhotoId(null);
   }, []);
 
   // Handle Search / Retrieval Session
@@ -465,7 +319,13 @@ export default function RecallApp() {
         {/* Center: Search Bar with AI Option ON THE RIGHT */}
         <div className="gp-header-center">
           <SearchBar
-            onSearch={handleSearch}
+            onSearch={(clue) => {
+              setIsAgentOpen(true);
+              handleSearch(clue);
+            }}
+            onOpenAgent={() => {
+              setIsAgentOpen(true);
+            }}
             isLoading={uiState === "searching" || uiState === "refining"}
             mode={mode}
             onModeChange={(newMode) => setMode(newMode)}
@@ -560,7 +420,7 @@ export default function RecallApp() {
             </div>
           )}
 
-          {/* Exact Google Photos Empty Hero State matching screenshot */}
+          {/* Exact Google Photos Empty Hero State (optional) */}
           {activeSidebarItem === "photos" && uiState === "idle" && showEmptyHero && (
             <GooglePhotosEmptyHero
               onUploadClick={() => setShowUploadModal(true)}
@@ -568,43 +428,20 @@ export default function RecallApp() {
             />
           )}
 
-          {/* INLINE AI ASSISTANT: Asks Question & Gives Results Near Search Bar */}
-          {(uiState === "searching" || uiState === "clusters_shown" || uiState === "refining") && (
+          {/* RECALL AI: Scripted, Deterministic Conversational Agent Panel */}
+          {isAgentOpen && (
             <AIQuestionResultsPanel
-              query={lastClue}
-              question={question}
-              clusters={clusters}
-              allPhotos={allUniquePhotos}
-              turnsUsed={turnsUsed}
-              maxTurns={3}
-              isLoading={uiState === "searching" || uiState === "refining"}
-              confidence={confidence}
-              elapsedMs={elapsedMs}
-              onSelectAnswer={handleSelectAnswer}
-              onFeedback={handleFeedback}
-              onPhotoClick={(p) => setSelectedPhoto(p)}
-              onConfirmPhoto={handleConfirm}
-              onAnchorPhoto={(p) => setAnchorTargetPhoto(p)}
-              onClose={() => setUiState("idle")}
+              onClose={() => setIsAgentOpen(false)}
+              onSelectFoundPhoto={(photo) => {
+                setHighlightedPhotoId(photo.id);
+                setSelectedPhoto(photo as unknown as Photo);
+              }}
+              onHighlightPhoto={(photoId) => setHighlightedPhotoId(photoId)}
+              initialQuery={lastClue}
             />
           )}
 
-          {/* Error Message */}
-          {uiState === "error" && (
-            <div className="gp-error-box">
-              <h4 className="error-title">Search Error</h4>
-              <p className="error-desc">{errorMessage}</p>
-              <button
-                type="button"
-                className="btn-retry-search"
-                onClick={() => lastClue && handleSearch(lastClue)}
-              >
-                Retry Search
-              </button>
-            </div>
-          )}
-
-          {/* Gallery View: Stories Carousel + Chronological Photo Feed */}
+          {/* Gallery View: Stories Carousel + Chronological Photo Feed (Seeded with 24 photos) */}
           {activeSidebarItem === "photos" && !showEmptyHero && (
             <div className="gp-feed-container">
               {/* Return to welcome/empty screen toggle */}
@@ -614,7 +451,7 @@ export default function RecallApp() {
                   className="btn-return-welcome"
                   onClick={() => setShowEmptyHero(true)}
                 >
-                  ← Return to welcome view
+                  ← Show welcome empty state
                 </button>
               </div>
 
@@ -635,6 +472,7 @@ export default function RecallApp() {
                 onPhotoClick={(p) => setSelectedPhoto(p)}
                 onConfirm={handleConfirm}
                 onAnchor={(p) => setAnchorTargetPhoto(p)}
+                highlightedPhotoId={highlightedPhotoId}
               />
             </div>
           )}
@@ -680,6 +518,7 @@ export default function RecallApp() {
         }}
         onOpenRecallAI={() => {
           setMode("recall");
+          setIsAgentOpen(true);
           const searchInput = document.getElementById("google-photos-search-input");
           searchInput?.focus();
         }}
